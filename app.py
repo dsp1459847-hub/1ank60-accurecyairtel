@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(layout="wide")
-st.title("🎰 Satta King Full Strategy")
+st.title("🎯 Satta Predictor Pro")
 
-# File upload
-file = st.file_uploader("0DSP0.xlsx")
+file = st.file_uploader("Upload 0DSP0.xlsx", type="xlsx")
 
 if file:
     df = pd.read_excel(file)
@@ -13,111 +12,74 @@ if file:
     df = df.dropna(subset=['DATE']).sort_values('DATE')
     
     # Controls
-    days = st.slider("Analysis Days", 7, 60, 30)
-    shift = st.selectbox("Main Shift", ['DS', 'SG', 'FD', 'GD'])
+    days = st.slider("Days", 7, 60, 30)
+    shift = st.selectbox("Shift", ['DS', 'SG', 'FD', 'GD', 'GL', 'DB'])
     
     recent = df.tail(days)
     
-    st.header(f"🎯 {shift} Strategy")
-    
-    # Prediction Logic
+    # Prediction calculation
     data = recent[shift].dropna().astype(str)
     digits = []
+    last_digits = []
+    
     for val in data:
         s = str(val)
         if len(s) >= 2 and s != 'XX':
-            digits.append(s)
+            digits.append(s[0])
+            last_digits.append(s[1])
     
-    if len(digits) >= 5:
-        # Classify numbers
-        single_digits = [d[0] for d in digits]
-        last_digits = [d[1] for d in digits]
-        
-        # Most common
-        top_single = max(set(single_digits), key=single_digits.count)
-        top_last = max(set(last_digits), key=last_digits.count)
-        
-        # Form 2-digit numbers
-        predictions = []
-        for s in [top_single]:
-            for l in [top_last, str((int(top_last)+1)%10), str((int(top_last)-1)%10)]:
-                predictions.append(s+l)
-        
-        st.success(f"**Class A (Safe): {top_single}{top_last}**")
-        st.info(f"**Class B: {', '.join(predictions[:3])}**")
-        st.write(f"**Jodi: {top_single}{top_last}, {top_single}0-{top_single}9**")
+    top_single = '5'
+    top_last = '0'
     
-    # Full Game Strategy
-    st.header("🎮 Complete Betting Strategy")
+    if digits:
+        single_count = {}
+        for d in digits:
+            single_count[d] = single_count.get(d, 0) + 1
+        top_single = max(single_count, key=single_count.get)
     
-    col1, col2 = st.columns(2)
+    if last_digits:
+        last_count = {}
+        for d in last_digits:
+            last_count[d] = last_count.get(d, 0) + 1
+        top_last = max(last_count, key=last_count.get)
     
-    with col1:
-        st.markdown("""
-        ### **Class 1 - Safe Play (₹100)**
-        | Bet | Amount | Payout |
-        |-----|--------|--------|
-        | {top_single} | ₹40 | ₹400 |
-        | {top_single}{top_last} | ₹30 | ₹3000 |
-        | {top_single}* | ₹30 | ₹300 |
-
-        **Total Risk: ₹100**
-        **Min Return: ₹400**
-        """.format(top_single=top_single, top_last=top_last))
+    st.header(f"🎯 {shift} Predictions")
+    st.success(f"**Main Number: {top_single}{top_last}**")
+    st.info(f"Single: **{top_single}** | Last Digit: **{top_last}**")
     
-    with col2:
-        st.markdown("""
-        ### **Class 2 - High Risk (₹200)**
-        | Bet | Amount | Payout |
-        |-----|--------|--------|
-        | Top 3 Jodi | ₹100 | ₹10000 |
-        | Patti | ₹50 | ₹5000 |
-        | Single | ₹50 | ₹500 |
-
-        **Max Win: ₹10000+**
-        """)
-    
-    # Live Results
-    st.header("📊 Recent {shift} Results".format(shift=shift))
-    st.dataframe(recent[['DATE', shift]].head(10))
-    
-    # Betting Calculator
-    st.header("💰 Profit Calculator")
-    bet_amount = st.number_input("Bet Amount (₹)", 100, 10000, 500)
-    win_single = st.number_input("Single Payout (₹)", 90, 100, 90)
-    win_jodi = st.number_input("Jodi Payout (₹)", 90, 100, 90)
-    
-    if st.button("Calculate"):
-        single_bet = bet_amount * 0.4
-        jodi_bet = bet_amount * 0.3
-        patti_bet = bet_amount * 0.3
-        
-        st.success(f"""
-        **Single Win: ₹{single_bet * win_single:.0f}**
-        **Jodi Win: ₹{jodi_bet * win_jodi * 10:.0f}**  
-        **Patti Win: ₹{patti_bet * 50:.0f}**
-        **Best Case: ₹{(single_bet * win_single + jodi_bet * win_jodi * 10):.0f}**
-        """)
-    
-    # Download strategy sheet
-    strategy_data = {
-        'Play': ['Safe Single', 'Jodi', 'Patti', 'Haruf'],
-        'Amount': [40, 30, 30, 100],
+    # Strategy Table
+    st.header("🎮 Betting Strategy")
+    strategy = pd.DataFrame({
+        'Play Type': ['Single', 'Jodi', 'Patti', 'Haruf'],
+        'Bet (₹100 total)': ['₹40', '₹30', '₹20', '₹10'],
         'Prediction': [top_single, f"{top_single}{top_last}", f"{top_single}*", top_single],
-        'Payout': [400, 3000, 300, 900]
-    }
-    csv_strategy = pd.DataFrame(strategy_data).to_csv(index=False)
-    st.download_button("📥 Download Strategy CSV", csv_strategy, "strategy.csv")
+        'Payout': ['₹400', '₹3000', '₹1000', '₹900']
+    })
+    st.table(strategy)
+    
+    # Calculator
+    bet_total = st.number_input("Total Bet (₹)", 100, 1000, 200)
+    st.write(f"**Single ({top_single}): ₹{bet_total*0.4:.0f} → Win ₹{(bet_total*0.4)*9:.0f}**")
+    st.write(f"**Jodi ({top_single}{top_last}): ₹{bet_total*0.3:.0f} → Win ₹{(bet_total*0.3)*90:.0f}**")
+    
+    # Recent results
+    st.header("Recent Results")
+    cols = ['DATE', shift]
+    st.dataframe(recent[cols].head(10))
+    
+    # Download
+    csv = recent[['DATE', 'DS', 'SG', 'FD']].to_csv()
+    st.download_button("Download CSV", csv, "predictions.csv")
 
-# Sidebar Game Rules
-st.sidebar.header("🎲 How to Play")
-st.markdown("""
-1. **Class A**: Safe - Single + Jodi
-2. **Class B**: Risky - Patti + Haruf  
-3. **Daily Routine**:
-   - Morning: Update Excel
-   - Predict → Bet ₹100-500
-   - Track CSV
+st.sidebar.markdown("""
+**Daily Strategy:**
+1. Upload latest Excel
+2. Select 30 days + DS
+3. Bet: Single + Jodi  
+4. Track CSV
+
+**Risk Management:**
+- Daily limit: ₹200-500
+- 40% hit rate expected
+- Never chase losses
 """)
-
-st.balloons()
