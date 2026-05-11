@@ -2,93 +2,110 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(layout="wide")
-st.title("🎯 Satta Predictor Pro")
+st.title("🎯 Satta Predictor - Full Control")
 
 # File upload
-file = st.file_uploader("Upload 0DSP0.xlsx")
+file = st.file_uploader("Upload Excel", type="xlsx")
 
 if file:
     df = pd.read_excel(file)
     df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
     df = df.dropna(subset=['DATE']).sort_values('DATE')
     
-    st.success(f"Loaded {len(df)} days")
+    st.success(f"✅ {len(df)} days loaded")
     
-    # Sidebar controls
-    st.sidebar.header("⚙️ Controls")
-    days_back = st.sidebar.slider("Days for Analysis", 7, 90, 30)
-    shift = st.sidebar.selectbox("Select Shift", ['DS', 'SG', 'FD', 'GD', 'GL', 'DB'])
+    # Controls
+    st.header("⚙️ Select Options")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        days_back = st.selectbox("Days Back", [7, 15, 30, 60, 90])
+        shift = st.selectbox("Shift", ['DS', 'SG', 'FD', 'GD', 'GL', 'DB'])
+    
+    with col2:
+        start_date = st.date_input("Start Date", df['DATE'].min())
+        end_date = st.date_input("End Date", df['DATE'].max())
     
     # Filter data
-    recent_df = df.tail(days_back)
+    mask = (df['DATE'] >= pd.to_datetime(start_date)) & (df['DATE'] <= pd.to_datetime(end_date))
+    filtered_df = df[mask].tail(days_back)
     
-    # Prediction for selected shift
-    st.header(f"🔮 {shift} Predictions")
+    st.subheader(f"**Prediction for {shift}** (Last {days_back} days)")
     
-    data = recent_df[shift].dropna().head(20).astype(str)
-    digits = [s[0] for s in data if len(s)>0 and s!='XX']
+    # Get digits
+    data = filtered_df[shift].dropna().astype(str)
+    digits = []
+    for val in data:
+        if len(val) > 0 and val != 'XX':
+            digits.append(val[0])
     
-    if len(digits) > 3:
-        # Count digits
-        counts = {}
+    if len(digits) >= 3:
+        # Count manually
+        count_dict = {}
         for d in digits:
             if d.isdigit():
-                counts[d] = counts.get(d, 0) + 1
+                count_dict[d] = count_dict.get(d, 0) + 1
         
-        # Top 5
-        top_digits = sorted(counts, key=counts.get, reverse=True)[:5]
-        st.markdown(f"**Top Prediction: {top_digits[0]}**")
-        st.write(f"Top 5: **{', '.join(top_digits)}**")
-        st.write(f"Based on last {len(digits)} results")
+        # Top 3
+        sorted_digits = sorted(count_dict, key=count_dict.get, reverse=True)
+        st.success(f"**Top Prediction: {sorted_digits[0]}**")
+        st.info(f"Top 3: **{', '.join(sorted_digits[:3])}**")
+        st.write(f"From {len(digits)} results | Frequency: {count_dict[sorted_digits[0]]}")
     
     # Backtest
-    st.header("📊 Backtest")
-    if len(recent_df) > 10:
-        test_results = []
-        for i in range(10, len(recent_df)):
-            train_digits = [s[0] for s in recent_df[shift].dropna().head(i).astype(str) if len(str(s))>0 and str(s)!='XX']
-            test_digit = str(recent_df[shift].iloc[i])[0] if len(str(recent_df[shift].iloc[i]))>0 else 'X'
-            
-            if len(train_digits) > 3 and test_digit.isdigit():
-                train_counts = {}
-                for d in train_digits[-10:]:
-                    train_counts[d] = train_counts.get(d, 0) + 1
-                pred_top = sorted(train_counts, key=train_counts.get, reverse=True)[0]
-                hit = test_digit == pred_top
-                test_results.append({'Date': recent_df['DATE'].iloc[i], 'Actual': test_digit, 'Predicted': pred_top, 'Hit': hit})
+    st.subheader("**Backtest Results**")
+    if len(filtered_df) > 10:
+        hits = 0
+        total = 0
         
-        if test_results:
-            bt_df = pd.DataFrame(test_results)
-            accuracy = bt_df['Hit'].mean() * 100
-            st.metric("Accuracy", f"{accuracy:.1f}%")
-            st.dataframe(bt_df.tail(10))
+        for i in range(10, len(filtered_df)):
+            train_data = filtered_df[shift].dropna().head(i).astype(str)
+            train_digits = [s[0] for s in train_data if len(s)>0 and s!='XX']
+            
+            test_val = str(filtered_df[shift].iloc[i])
+            if len(test_val)>0 and test_val!='XX':
+                test_digit = test_val[0]
+                if len(train_digits) > 3:
+                    train_count = {}
+                    for d in train_digits[-10:]:
+                        train_count[d] = train_count.get(d, 0) + 1
+                    pred = max(train_count, key=train_count.get)
+                    if test_digit == pred:
+                        hits += 1
+                    total += 1
+        
+        if total > 0:
+            acc = (hits/total)*100
+            st.metric("Accuracy", f"{acc:.1f}% ({hits}/{total})")
     
-    # All shifts quick view
-    st.header("Quick All Shifts")
-    cols = st.columns(3)
-    all_shifts = ['DS', 'SG', 'FD', 'GD']
+    # Quick predictions all shifts
+    st.subheader("**All Shifts Quick View**")
+    pred_row = st.columns(6)
+    all_shifts = ['DS', 'SG', 'FD', 'GD', 'GL', 'DB']
+    
     for i, s in enumerate(all_shifts):
-        with cols[i]:
-            data = recent_df[s].dropna().head(10).astype(str)
-            digits = [x[0] for x in data if len(x)>0 and x!='XX']
-            if digits:
-                top = max(set(digits), key=digits.count)
-                st.markdown(f"**{s}: {top}**")
+        if s in filtered_df.columns:
+            data = filtered_df[s].dropna().head(10).astype(str)
+            digs = [x[0] for x in data if len(x)>0 and x!='XX']
+            if digs:
+                top = max(set(digs), key=digs.count)
+                with pred_row[i]:
+                    st.markdown(f"**{s}<br><span style='font-size:2em;color:green'>{top}</span>**", unsafe_allow_html=True)
+    
+    # Data preview
+    st.subheader("**Recent Data**")
+    cols = ['DATE'] + [s for s in all_shifts if s in df.columns][:4]
+    st.dataframe(filtered_df[cols].head(10))
     
     # Download
-    csv = recent_df[['DATE', 'DS', 'SG', 'FD', 'GD']].to_csv(index=False)
-    st.download_button("Download Data", csv, "data.csv")
+    csv = filtered_df[['DATE', 'DS', 'SG', 'FD']].to_csv(index=False)
+    st.download_button("📥 Download CSV", csv, "predictions.csv")
 
+# Sidebar
+st.sidebar.header("Controls")
 st.sidebar.markdown("""
-**Features:**
-- Date range selector
-- Shift selector  
-- Live backtest
-- Top predictions
-- CSV export
-
-**Usage:**
-1. Upload Excel
-2. Select days/shift
-3. See predictions + accuracy
+- **Days**: Analysis period
+- **Shift**: Focus prediction  
+- **Dates**: Custom range
+- **Backtest**: Live accuracy
 """)
