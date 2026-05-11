@@ -1,85 +1,78 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(layout="wide")
-st.title("🎯 Satta Predictor Pro")
+st.title("📅 Date Wise Prediction")
 
-file = st.file_uploader("Upload 0DSP0.xlsx", type="xlsx")
+# File upload
+uploaded_file = st.file_uploader("0DSP0.xlsx", type="xlsx")
 
-if file:
-    df = pd.read_excel(file)
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
     df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
     df = df.dropna(subset=['DATE']).sort_values('DATE')
     
-    # Controls
-    days = st.slider("Days", 7, 60, 30)
-    shift = st.selectbox("Shift", ['DS', 'SG', 'FD', 'GD', 'GL', 'DB'])
+    st.success(f"Loaded {len(df)} days")
     
-    recent = df.tail(days)
+    # Date selector
+    selected_date = st.date_input("Select Date for Prediction", df['DATE'].max())
     
-    # Prediction calculation
-    data = recent[shift].dropna().astype(str)
-    digits = []
-    last_digits = []
+    # Find closest past dates for pattern
+    target_date = pd.to_datetime(selected_date)
+    past_data = df[df['DATE'] < target_date].tail(30)  # Last 30 days before selected date
     
-    for val in data:
-        s = str(val)
-        if len(s) >= 2 and s != 'XX':
-            digits.append(s[0])
-            last_digits.append(s[1])
+    st.header(f"Prediction for {selected_date.strftime('%d-%m-%Y')}")
     
-    top_single = '5'
-    top_last = '0'
+    # Shifts
+    shifts = ['DS', 'SG', 'FD', 'GD', 'GL', 'DB']
     
-    if digits:
-        single_count = {}
-        for d in digits:
-            single_count[d] = single_count.get(d, 0) + 1
-        top_single = max(single_count, key=single_count.get)
+    predictions = {}
     
-    if last_digits:
-        last_count = {}
-        for d in last_digits:
-            last_count[d] = last_count.get(d, 0) + 1
-        top_last = max(last_count, key=last_count.get)
+    for shift in shifts:
+        if shift in df.columns:
+            # Pattern from past 30 days
+            recent_shift = past_data[shift].dropna().astype(str)
+            first_digits = []
+            for val in recent_shift:
+                if len(str(val)) >= 1 and str(val) != 'XX':
+                    first_digits.append(str(val)[0])
+            
+            if len(first_digits) > 5:
+                # Most common pattern
+                count = {}
+                for d in first_digits:
+                    count[d] = count.get(d, 0) + 1
+                
+                top_digit = max(count, key=count.get)
+                predictions[shift] = top_digit
+                st.write(f"**{shift}: {top_digit}** (from {count[top_digit]} repeats)")
     
-    st.header(f"🎯 {shift} Predictions")
-    st.success(f"**Main Number: {top_single}{top_last}**")
-    st.info(f"Single: **{top_single}** | Last Digit: **{top_last}**")
+    # Show prediction table
+    if predictions:
+        pred_df = pd.DataFrame(list(predictions.items()), columns=['Shift', 'Predicted Digit'])
+        st.table(pred_df)
     
-    # Strategy Table
-    st.header("🎮 Betting Strategy")
-    strategy = pd.DataFrame({
-        'Play Type': ['Single', 'Jodi', 'Patti', 'Haruf'],
-        'Bet (₹100 total)': ['₹40', '₹30', '₹20', '₹10'],
-        'Prediction': [top_single, f"{top_single}{top_last}", f"{top_single}*", top_single],
-        'Payout': ['₹400', '₹3000', '₹1000', '₹900']
-    })
-    st.table(strategy)
+    # Show actual result (if date exists)
+    actual_row = df[df['DATE'] == target_date]
+    if not actual_row.empty:
+        st.header("Actual Result (for verification)")
+        st.dataframe(actual_row[['DATE', 'DS', 'SG', 'FD', 'GD', 'GL', 'DB']])
+    else:
+        st.info("Future date - Prediction ready!")
     
-    # Calculator
-    bet_total = st.number_input("Total Bet (₹)", 100, 1000, 200)
-    st.write(f"**Single ({top_single}): ₹{bet_total*0.4:.0f} → Win ₹{(bet_total*0.4)*9:.0f}**")
-    st.write(f"**Jodi ({top_single}{top_last}): ₹{bet_total*0.3:.0f} → Win ₹{(bet_total*0.3)*90:.0f}**")
-    
-    # Recent results
-    st.header("Recent Results")
-    cols = ['DATE', shift]
-    st.dataframe(recent[cols].head(10))
-    
-    # Download
-    csv = recent[['DATE', 'DS', 'SG', 'FD']].to_csv()
-    st.download_button("Download CSV", csv, "predictions.csv")
+    # History preview
+    st.header("Pattern Source (30 days before)")
+    st.dataframe(past_data[['DATE', 'DS', 'SG']].tail(10))
 
+# Sidebar
 st.sidebar.markdown("""
-**Daily Strategy:**
-1. Upload latest Excel
-2. Select 30 days + DS
-3. Bet: Single + Jodi  
-4. Track CSV
+**How it Works:**
+1. Select any date
+2. App finds patterns from PREVIOUS 30 days
+3. Predicts single digit for each shift
+4. Compare with actual (if available)
 
-**Risk Management:**
-- Daily limit: ₹200-500
-- 40% hit rate expected
-- Never chase losses
+**Perfect for:**
+- Backtesting past predictions
+- Tomorrow's forecast
+- Pattern verification
 """)
