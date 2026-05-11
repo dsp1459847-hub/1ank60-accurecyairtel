@@ -1,44 +1,45 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(layout="wide")
-st.title("🎯 Satta Prediction Tool")
+st.title("Satta Predictor")
 
-uploaded_file = st.file_uploader("Upload 0DSP0.xlsx", type="xlsx")
+# File upload
+file = st.file_uploader("0DSP0.xlsx", type="xlsx")
 
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
-    df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
-    df = df.sort_values('DATE', ascending=False).head(100)
+if file:
+    df = pd.read_excel(file)
+    df = df.sort_values('DATE', ascending=False).head(50)
     
-    st.success(f"Loaded {len(df)} records")
+    st.write("Predictions:")
     
     shifts = ['DS', 'SG', 'FD', 'GD', 'GL', 'DB']
-    st.subheader("Tomorrow's Predictions")
     
     for shift in shifts:
         if shift in df.columns:
-            recent = df[shift].dropna().head(10).astype(str)
+            data = df[shift].dropna().head(10)
             digits = []
-            for x in recent:
-                if len(x) > 0 and x not in ['XX', 'nan']:
-                    digits.append(x[0])
+            for val in data:
+                s = str(val)
+                if len(s) > 0 and s != 'XX':
+                    digits.append(s[0])
             
-            if len(digits) >= 2:
-                from collections import Counter
-                top3 = [d for d, c in Counter(digits).most_common(3)]
-                st.markdown(f"**{shift}:** {', '.join(top3)}")
+            if len(digits) > 1:
+                counts = {}
+                for d in digits:
+                    if d in counts:
+                        counts[d] += 1
+                    else:
+                        counts[d] = 1
+                
+                top = sorted(counts, key=counts.get, reverse=True)[:3]
+                st.write(f"{shift}: {', '.join(top)}")
     
-    # Last 10 days
-    st.subheader("Last 10 Days")
-    cols = ['DATE', 'DS', 'SG', 'FD', 'GD', 'GL', 'DB']
-    show_df = df[cols].head(10).fillna('XX')
-    st.dataframe(show_df)
+    # Show recent data
+    st.write("Recent Data:")
+    st.dataframe(df[['DATE','DS','SG','FD']].head(10))
     
     # Download
-    csv = df[['DATE','DS','SG','FD','GD','GL','DB']].head(30).to_csv(index=False)
-    st.download_button("Download CSV", csv, "predictions.csv")
+    csv = df[['DATE','DS','SG']].to_csv(index=False)
+    st.download_button("CSV", csv, "data.csv")
 
-st.sidebar.markdown("## Setup
-**Local:** pip install streamlit pandas openpyxl
-**Run:** streamlit run app.py")
+st.sidebar.write("Upload file to start")
