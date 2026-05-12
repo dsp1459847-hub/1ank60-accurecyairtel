@@ -1,76 +1,98 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from datetime import datetime
 
-# Page Configuration
-st.set_page_config(page_title="MAYA AI - Prediction Dashboard", layout="wide")
+# Page Setup
+st.set_page_config(page_title="MAYA Adaptive Super-AI", page_icon="🎯", layout="wide")
 
-st.title("📊 Numerical Forecasting Dashboard")
-st.subheader("Data-Driven Single Ank Prediction")
+# Custom CSS for Professional Look
+st.markdown("""
+    <style>
+    .main { background-color: #f0f2f6; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    </style>
+    """, unsafe_allow_html=True)
 
-# File Upload Section
-uploaded_file = st.file_uploader("अपनी एक्सेल (CSV) फाइल अपलोड करें", type=["csv"])
+st.title("🎯 MAYA Adaptive Super-AI v2.0")
+st.write("Numerical Forecasting with Pattern Convergence Logic")
 
-if uploaded_file is not None:
+# Sidebar for Configuration
+st.sidebar.header("AI Configuration")
+lookback_days = st.sidebar.slider("Lookback Period (Days)", 5, 30, 10)
+confidence_threshold = st.sidebar.slider("Confidence Boost", 1, 5, 3)
+
+# File Upload
+uploaded_file = st.file_uploader("Upload your Prediction Excel (CSV)", type=["csv"])
+
+if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
-        st.success("फाइल सफलतापूर्वक लोड हो गई!")
+        # Ensure numeric data
+        for col in ['DS', 'FB', 'GB', 'GL']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
         
-        # डेटा प्रिव्यू
-        with st.expander("Raw Data देखें"):
-            st.write(df.tail(10))
+        df = df.dropna()
+        st.success(f"Loaded {len(df)} records. Analyzing patterns...")
 
-        # शिफ्ट सिलेक्शन
-        shift = st.selectbox("किस शिफ्ट के लिए अंक चाहिए?", ["DS", "FB", "GB", "GL"])
+        target_shift = st.selectbox("Select Target Shift", ["DS", "FB", "GB", "GL"])
 
-        if st.button("Generate Prediction"):
-            # लॉजिक प्रोसेसिंग
-            last_row = df.iloc[-1]
+        if st.button("Run Adaptive Analysis"):
+            # Logic Engine
             scores = {i: 0 for i in range(10)}
-
-            # 1. Gap Analysis (Last 10 days)
-            last_10_str = df.tail(10).to_string()
-            for i in range(10):
-                if str(i) not in last_10_str:
-                    scores[i] += 4  # Gap अंक को सबसे ज्यादा प्राथमिकता
-
-            # 2. Date Sum Logic
-            today_date = datetime.now().day
-            d_sum = sum(int(d) for d in str(today_date)) % 10
-            scores[d_sum] += 2
-
-            # 3. Mirror/Unit Logic (From Previous DS)
-            ds_val = str(last_row['DS']).zfill(2)
-            ds_units = int(ds_val[1])
-            scores[ds_units] += 3  # Last digit follow
-            scores[(ds_units + 5) % 10] += 2 # Family/Mirror
-
-            # 4. Cross-Shift Heat
-            recent_results = str(last_row['FB']) + str(last_row['GB']) + str(last_row['GL'])
-            for i in range(10):
-                if str(i) in recent_results:
-                    scores[i] += 1
-
-            # परिणाम दिखाना
-            sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            last_row = df.iloc[-1]
             
-            col1, col2, col3 = st.columns(3)
+            # 1. GAP ANALYSIS (The "Missing Ank" Rule)
+            recent_data = df.tail(lookback_days).values.flatten().astype(str)
+            all_digits = "".join(recent_data)
+            for i in range(10):
+                if str(i) not in all_digits:
+                    scores[i] += 5  # Highest weight for long-term gaps
+                elif all_digits.count(str(i)) < 2:
+                    scores[i] += 2 # Low frequency boost
+
+            # 2. ADAPTIVE CROSS-SHIFT (Current Day Flow)
+            current_day_str = str(last_row.values)
+            for i in range(10):
+                if str(i) in current_day_str:
+                    scores[i] += confidence_threshold # User-defined boost
+
+            # 3. DATE-TIME CONVERGENCE
+            d_sum = sum(int(d) for d in str(datetime.now().day)) % 10
+            scores[d_sum] += 2
+            
+            # 4. MIRROR REFLECTION
+            # If target is GB, look at DS; if target is GL, look at GB
+            source_map = {"GB": "DS", "GL": "GB", "FB": "DS", "DS": "GL"}
+            source_val = str(int(last_row[source_map[target_shift]])).zfill(2)
+            unit_digit = int(source_val[-1])
+            mirror_digit = (unit_digit + 5) % 10
+            
+            scores[unit_digit] += 3
+            scores[mirror_digit] += 2
+
+            # Processing Results
+            results = pd.DataFrame(scores.items(), columns=['Ank', 'Score']).sort_values(by='Score', ascending=False)
+            top_ank = results.iloc[0]['Ank']
+            
+            # UI Display
+            col1, col2 = st.columns([1, 2])
             
             with col1:
-                st.metric(label="🔥 STRONG SINGLE ANK", value=sorted_scores[0][0])
-            with col2:
-                st.metric(label="Support 1", value=sorted_scores[1][0])
-            with col3:
-                st.metric(label="Support 2", value=sorted_scores[2][0])
+                st.metric("🔥 STRONG SINGLE", f"{top_ank}", f"Score: {results.iloc[0]['Score']}")
+                st.write("---")
+                st.write("**Top Recommendations:**")
+                st.dataframe(results.head(4), hide_index=True)
 
-            # स्कोर चार्ट
-            st.write("### Prediction Confidence Score")
-            chart_data = pd.DataFrame(scores.items(), columns=['Ank', 'Score']).set_index('Ank')
-            st.bar_chart(chart_data)
+            with col2:
+                st.write("### Pattern Distribution")
+                st.bar_chart(results.set_index('Ank'))
+
+            st.info(f"AI Logic: आधारित है {source_map[target_shift]} -> {target_shift} क्रॉस-फ्लो और {lookback_days} दिनों के गैप एनालिसिस पर।")
 
     except Exception as e:
-        st.error(f"Error: फाइल फॉर्मेट चेक करें। सुनिश्चित करें कि कॉलम के नाम DS, FB, GB, GL हैं। | {e}")
-
+        st.error(f"Error analyzing data: {e}")
 else:
-    st.info("कृपया डेटा प्रोसेस करने के लिए अपनी CSV फाइल अपलोड करें।")
+    st.warning("Please upload a CSV file to begin.")
     
