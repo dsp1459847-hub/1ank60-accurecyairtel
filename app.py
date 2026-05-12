@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 
 # Page Setup
-st.set_page_config(page_title="MAYA AI - History & Prediction", layout="wide")
+st.set_page_config(page_title="MAYA AI - Date Wise Prediction", layout="wide")
 
-st.title("🎯 MAYA Adaptive Super-AI v4.5")
+st.title("🎯 MAYA Adaptive Super-AI v4.6")
 
 uploaded_file = st.file_uploader("अपनी CSV फाइल अपलोड करें", type=["csv"])
 
@@ -14,34 +14,36 @@ if uploaded_file:
         df = pd.read_csv(uploaded_file, skip_blank_lines=True).dropna(how='all')
         df.columns = [str(c).strip().upper() for c in df.columns]
         
-        # कॉलम पहचान: FD, GD, DS, GL
-        col_map = {'DS': 'DS', 'FB': 'FD', 'GB': 'GD', 'GL': 'GL'}
+        # आपकी फाइल के कॉलम्स: DS, FD, GD, GL
         game_cols = ['DS', 'FD', 'GD', 'GL']
         
-        # नंबरों को साफ करना
+        # नंबरों को क्लीन करना
         for col in game_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-        # --- तारीख को फिक्स करना (Critical Step) ---
+        # --- DATE SELECTION OPTION ---
         if 'DATE' in df.columns:
-            # तारीख को साफ़ सुथरा करना
-            df['DATE'] = df['DATE'].astype(str).str.strip()
-            all_dates = df['DATE'].unique().tolist()
+            # तारीखों की लिस्ट बनाना (उल्टे क्रम में ताकि ताज़ा तारीख सबसे ऊपर हो)
+            date_list = df['DATE'].unique().tolist()[::-1]
             
-            # --- UI CONTROLS ---
-            st.sidebar.header("Settings")
-            # ड्रॉपडाउन ताकि तारीख गलत होने का चांस ही न रहे
-            sel_date = st.sidebar.selectbox("तारीख चुनें (History के लिए):", options=all_dates[::-1])
-            target_s = st.sidebar.selectbox("किस शिफ्ट का अंक निकालें?", game_cols)
+            st.markdown("### 📅 तारीख और शिफ्ट चुनें")
+            c_date, c_shift = st.columns(2)
+            
+            with c_date:
+                # यहाँ आएगा तारीख चुनने का ऑप्शन
+                sel_date = st.selectbox("तारीख चुनें:", options=date_list)
+            
+            with c_shift:
+                target_s = st.selectbox("शिफ्ट चुनें:", game_cols)
 
-            # डेटा फिल्टर (चुनी हुई तारीख तक)
+            # चुनी हुई तारीख का इंडेक्स निकालकर डेटा फिल्टर करना
             idx = df[df['DATE'] == sel_date].index[0]
             f_df = df.iloc[:idx + 1]
-            current_data = df.iloc[idx] # चुनी हुई तारीख का असली रिजल्ट
+            current_data = df.iloc[idx] 
 
-            # --- SECTION 1: HISTORY DISPLAY ---
-            st.markdown(f"### 🕒 तारीख {sel_date} का असली रिजल्ट (History)")
+            # --- HISTORY DISPLAY ---
+            st.info(f"🕒 {sel_date} के असली रिजल्ट्स")
             h1, h2, h3, h4 = st.columns(4)
             h1.metric("DS", current_data['DS'])
             h2.metric("FD", current_data['FD'])
@@ -50,10 +52,10 @@ if uploaded_file:
             
             st.divider()
 
-            # --- SECTION 2: AUTO-CALCULATION ---
+            # --- PREDICTION LOGIC ---
             scores = {i: 0 for i in range(10)}
             
-            # पिछली शिफ्ट का बेस (FD के लिए DS, GD के लिए FD...)
+            # बेस अंक चुनना
             if target_s == 'FD': base = current_data['DS']
             elif target_s == 'GD': base = current_data['FD']
             elif target_s == 'GL': base = current_data['GD']
@@ -63,28 +65,28 @@ if uploaded_file:
             scores[u_ank] += 4
             scores[(u_ank + 5) % 10] += 3
             
-            # गैप एनालिसिस (पिछले 7 रिकॉर्ड)
+            # गैप एनालिसिस
             recent_vals = f_df.tail(7)[game_cols].astype(str).values.flatten()
-            all_d = "".join(recent_vals)
+            all_digits = "".join(recent_vals)
             for i in range(10):
-                if str(i) not in all_d: scores[i] += 5
+                if str(i) not in all_digits: scores[i] += 5
             
-            # रिजल्ट डिस्प्ले
+            # रिजल्ट दिखाना
             res = pd.DataFrame(scores.items(), columns=['Ank', 'Score']).sort_values(by='Score', ascending=False)
             
-            st.subheader(f"🔮 {target_s} के लिए प्रेडिक्शन")
-            c1, c2 = st.columns([1, 2])
-            with c1:
+            st.subheader(f"🔮 {target_s} प्रेडिक्शन")
+            res_col1, res_col2 = st.columns([1, 2])
+            with res_col1:
                 st.success(f"सबसे मजबूत अंक: {res.iloc[0]['Ank']}")
-                st.write("**टॉप 5 अंक स्कोर:**")
+                st.write("**स्कोर टेबल:**")
                 st.dataframe(res.head(5), hide_index=True)
-            with c2:
+            with res_col2:
                 st.bar_chart(res.set_index('Ank'))
         else:
-            st.error("आपकी फाइल में 'DATE' नाम का कॉलम नहीं मिल रहा है!")
+            st.error("फाइल में 'DATE' कॉलम नहीं मिला। अपनी एक्सेल की पहली लाइन चेक करें।")
 
     except Exception as e:
-        st.error(f"गड़बड़ हुई: {e}")
+        st.error(f"Logic Error: {e}")
 else:
-    st.info("भाई, ऊपर फाइल अपलोड करो, फिर देखो जादू!")
+    st.info("भाई, पहले ऊपर फाइल अपलोड करो, तभी तारीख चुनने का ऑप्शन आएगा!")
     
