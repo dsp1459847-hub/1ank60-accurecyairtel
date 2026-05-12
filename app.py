@@ -15,49 +15,65 @@ if uploaded_file:
         # 1. Data load and cleaning
         df = pd.read_csv(uploaded_file, skip_blank_lines=True).dropna(how='all')
         
-        # Column names ko saaf karna (spaces hatana aur Capitalize karna)
+        # Column names ko clean karna
         df.columns = [str(c).strip().upper() for c in df.columns]
         
-        # Check for possible column matches
-        required_cols = ['DS', 'FB', 'GB', 'GL']
+        # --- SMART COLUMN MAPPING ---
+        # Agar file mein exact 'FB' nahi hai, toh milte julte naam dhoondna
+        def find_col(target, options):
+            for opt in options:
+                if target in opt or opt in target:
+                    return opt
+            return None
+
+        col_map = {
+            'DS': find_col('DS', df.columns) or find_col('DESAWAR', df.columns),
+            'FB': find_col('FB', df.columns) or find_col('FARIDABAD', df.columns),
+            'GB': find_col('GB', df.columns) or find_col('GHAZIABAD', df.columns),
+            'GL': find_col('GL', df.columns) or find_col('GALI', df.columns)
+        }
+
+        # Check if all required mappings found
+        missing = [k for k, v in col_map.items() if v is None]
         
-        # Agar file mein columns mil gaye
-        found_cols = [col for col in required_cols if col in df.columns]
-        
-        if len(found_cols) < 4:
-            st.error(f"Error: File mein ye columns nahi mile: {list(set(required_cols) - set(found_cols))}")
-            st.info("Kripya Excel ki pehli line check karein wahan DS, FB, GB, GL likha hona chahiye.")
+        if missing:
+            st.error(f"Error: File mein ye data nahi mila: {missing}")
+            st.info("Kripya check karein ki aapki CSV ki pehli line mein shifts ke naam sahi hain.")
+            st.write("Aapki file ke columns:", list(df.columns))
         else:
-            for col in required_cols:
+            # Rename columns to standard names for logic
+            df = df.rename(columns={v: k for k, v in col_map.items()})
+            
+            for col in ['DS', 'FB', 'GB', 'GL']:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             df = df.fillna(0)
             
             st.success("File Verified! Data Match Ho Gaya.")
             
-            target_shift = st.selectbox("Shift Chunein:", required_cols)
+            target_shift = st.selectbox("Shift Chunein:", ['DS', 'FB', 'GB', 'GL'])
 
             if st.button("Analysis Shuru Karein"):
                 scores = {i: 0 for i in range(10)}
                 last_row = df.iloc[-1]
                 
-                # --- STRATEGY 1: GAP ANALYSIS ---
-                recent_data = df.tail(10)[required_cols].astype(str).values.flatten()
+                # --- STRATEGY: GAP ANALYSIS ---
+                recent_data = df.tail(10)[['DS', 'FB', 'GB', 'GL']].astype(str).values.flatten()
                 all_digits = "".join(recent_data)
                 for i in range(10):
                     if str(i) not in all_digits:
                         scores[i] += 5
                 
-                # --- STRATEGY 2: DATE SUM ---
+                # --- STRATEGY: DATE SUM ---
                 d_sum = sum(int(d) for d in str(datetime.now().day)) % 10
                 scores[d_sum] += 2
                 
-                # --- STRATEGY 3: MIRROR LOGIC ---
+                # --- STRATEGY: MIRROR LOGIC ---
+                # Default source DS for all
                 source_val = str(int(last_row['DS'])).zfill(2)
                 unit_digit = int(source_val[-1])
                 scores[unit_digit] += 3
                 scores[(unit_digit + 5) % 10] += 2
                 
-                # Results Display
                 results = pd.DataFrame(scores.items(), columns=['Ank', 'Score']).sort_values(by='Score', ascending=False)
                 
                 c1, c2 = st.columns(2)
